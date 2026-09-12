@@ -1,0 +1,15 @@
+rules:
+  - id: detect-eval
+    pattern: eval($CODE)
+    message: Use of eval() detected. Dynamic code execution can lead to Remote Code Execution (RCE) vulnerabilities.
+    languages: [javascript]
+    severity: ERROR
+
+  - id: detect-hardcoded-secret
+    pattern: const $VAR = "..."
+    metavariable-regex:
+      metavariable: $VAR
+      regex: (?i)(secret|key|password|token)
+    message: Potential hardcoded secret, credential, or API key detected.
+    languages: [javascript]
+    severity: WARNING
