@@ -1,0 +1,15 @@
+# .semgrepignore
+# Exclude VIRGO's own code, dependencies, build artifacts, and test fixtures from Semgrep scans
+
+backend/
+frontend/
+node_modules/
+dist/
+build/
+scratch/
+test/
+tests/
+fixtures/
+*.min.js
+*.bundle.js
+package-lock.json

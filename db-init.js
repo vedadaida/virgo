@@ -39,6 +39,7 @@ async function init() {
             id SERIAL PRIMARY KEY,
             repo_id INT REFERENCES repos(id) ON DELETE CASCADE,
             status VARCHAR(50) NOT NULL,
+            pr_number INT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS findings (

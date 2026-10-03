@@ -10,10 +10,17 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
-export const connection = new IORedis(process.env.REDIS_URL, {
+const redisUrl = process.env.REDIS_URL;
+const isLocal = redisUrl.includes('127.0.0.1') || redisUrl.includes('localhost');
+
+export const connection = new IORedis(redisUrl, {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
-    tls: { rejectUnauthorized: false }
+    tls: isLocal ? undefined : { rejectUnauthorized: false }
+});
+
+connection.on('error', (err) => {
+    console.warn('[Redis] Connection warning:', err.message);
 });
 
 export const SCAN_QUEUE_NAME = 'security-scan-queue';
