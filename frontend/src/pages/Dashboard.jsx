@@ -2,7 +2,7 @@ import { useState } from 'react';
 import './Dashboard.css';
 
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low'];
-const SEVERITY_LABEL = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
+const SEVERITY_LABEL = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low', info: 'Info' };
 const SEVERITY_TAG = { critical: 'BLOCK', high: 'REVIEW', medium: 'REVIEW', low: 'TRACE' };
 
 export default function Dashboard({
@@ -65,14 +65,17 @@ export default function Dashboard({
             {repos.map(repo => (
               <li
                 key={repo.id}
+                title={repo.name}
                 className={`repo-item${selectedRepoId === repo.id ? ' active' : ''}`}
                 onClick={() => onSelectRepo && onSelectRepo(repo.id)}
               >
                 <div className="repo-name">
                   <span className="diamond" />
-                  {selectedRepoId === repo.id ? '> ' : ''}{repo.name}
+                  <span className="repo-name-text">
+                    {selectedRepoId === repo.id ? '> ' : ''}{repo.name}
+                  </span>
                 </div>
-                <div className="repo-sub">{repo.branch} // {repo.language}</div>
+                <div className="repo-sub">{repo.branch || 'main'} // {repo.language || 'repo'}</div>
               </li>
             ))}
           </ul>
@@ -149,8 +152,8 @@ export default function Dashboard({
                   onClick={() => onSelectFinding && onSelectFinding(f.id)}
                 >
                   <td>
-                    <span className={`badge ${f.severity}`}>
-                      <span className="dot" />{SEVERITY_LABEL[f.severity]}
+                    <span className={`badge ${f.severity || 'unknown'}`}>
+                      <span className="dot" />{SEVERITY_LABEL[f.severity] || (f.severity ? f.severity.toUpperCase() : 'UNKNOWN')}
                     </span>
                   </td>
                   <td className="finding-name">{f.name}</td>
@@ -184,7 +187,7 @@ export default function Dashboard({
 
           {selectedFinding && (
             <>
-              <div className="details-label">FINDING // {SEVERITY_LABEL[selectedFinding.severity]?.toUpperCase()}</div>
+              <div className="details-label">FINDING // {(SEVERITY_LABEL[selectedFinding.severity] || selectedFinding.severity || 'UNKNOWN').toUpperCase()}</div>
               <h2>{selectedFinding.name?.toUpperCase()}</h2>
 
               <div className="meta-row">

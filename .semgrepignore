@@ -1,5 +1,5 @@
 # .semgrepignore
-# Exclude VIRGO's own code, dependencies, build artifacts, and test fixtures from Semgrep scans
+# Exclude VIRGO's own code, dependencies, build artifacts, test fixtures, and scripts from Semgrep scans
 
 backend/
 frontend/
@@ -7,9 +7,18 @@ node_modules/
 dist/
 build/
 scratch/
+scripts/
 test/
 tests/
 fixtures/
 *.min.js
 *.bundle.js
 package-lock.json
+
+# Exclude VIRGO root-level internal development and test scripts
+scan-local.js
+queue-test.js
+db-init.js
+vulnerable.js
+test-vulnerable.js
+test_*.js

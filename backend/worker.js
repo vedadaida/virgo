@@ -89,11 +89,12 @@ function getContext(filePath, startLine, before = 5, after = 10) {
     }
 }
 
-// ─── Gemini Explanation (with retries, backoff, and 3-5 sentence requirement) ─
+// ─── Gemini Explanation (with multi-model fallback and 3-5 sentence requirement) ─
 async function explainVulnerability(finding, codeContext) {
-    const ruleId  = finding.check_id || finding.rule_id || 'generic-rule';
-    const message = finding.extra && finding.extra.message ? finding.extra.message : '';
-    const lineNum = (finding.start && finding.start.line) ? finding.start.line : 1;
+    const rawRuleId = finding.check_id || finding.rule_id || 'generic-rule';
+    const ruleId    = rawRuleId.split('.').pop() || rawRuleId;
+    const message   = finding.extra && finding.extra.message ? finding.extra.message : '';
+    const lineNum   = (finding.start && finding.start.line) ? finding.start.line : 1;
 
     const prompt  = 'You are a professional application security engineer reviewing a code finding flagged by Semgrep.\n\n'
         + 'Vulnerability Details:\n'
@@ -113,12 +114,13 @@ async function explainVulnerability(finding, codeContext) {
         + '5. Suggested fix requirement: Clean, production-ready replacement code starting with "/* AI-generated, review before applying */".\n\n'
         + 'Respond in JSON format matching the schema.';
 
-    const maxRetries = 2;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const models = ['gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite'];
+    for (let attempt = 0; attempt < models.length; attempt++) {
+        const selectedModel = models[attempt];
         try {
-            console.log('[Worker] Requesting Gemini analysis for ' + ruleId + ' on line ' + lineNum + ' (attempt ' + attempt + '/' + maxRetries + ')...');
+            console.log('[Worker] Requesting Gemini analysis (' + selectedModel + ') for ' + ruleId + ' on line ' + lineNum + ' (attempt ' + (attempt + 1) + '/' + models.length + ')...');
             const resp = await ai.models.generateContent({
-                model: 'gemini-3.5-flash',
+                model: selectedModel,
                 contents: prompt,
                 config: {
                     responseMimeType: 'application/json',
@@ -139,25 +141,27 @@ async function explainVulnerability(finding, codeContext) {
             if (!parsed.explanation || !parsed.severity || !parsed.suggestedFix) {
                 throw new Error('Incomplete JSON schema returned by Gemini');
             }
-            console.log('[Worker] Gemini analysis succeeded for ' + ruleId);
+            console.log('[Worker] Gemini analysis succeeded for ' + ruleId + ' using ' + selectedModel);
             return parsed;
         } catch (e) {
-            console.error('[Worker] Gemini attempt ' + attempt + '/' + maxRetries + ' failed for ' + ruleId + ':', e.message);
-            if (e.stack) console.error('[Worker] Error stack:', e.stack);
-            if (attempt < maxRetries) {
-                const backoffMs = Math.pow(2, attempt) * 1000;
-                console.log('[Worker] Retrying Gemini call in ' + backoffMs + 'ms...');
+            console.error('[Worker] Gemini attempt ' + (attempt + 1) + ' failed with ' + selectedModel + ' for ' + ruleId + ':', e.message);
+            if (attempt < models.length - 1) {
+                const backoffMs = (attempt + 1) * 1500;
+                console.log('[Worker] Retrying with alternative model in ' + backoffMs + 'ms...');
                 await new Promise(res => setTimeout(res, backoffMs));
             }
         }
     }
 
-    // Explicit unavailable state instead of misleading placeholder text
-    console.warn('[Worker] All Gemini attempts exhausted for ' + ruleId + '. Storing explicit AI unavailable state.');
+    console.warn('[Worker] All Gemini models exhausted for ' + ruleId + '. Storing explicit AI unavailable state.');
+    let defaultSev = (finding.extra && finding.extra.severity) || 'MEDIUM';
+    if (defaultSev === 'ERROR') defaultSev = 'CRITICAL';
+    if (defaultSev === 'WARNING') defaultSev = 'MEDIUM';
+
     return {
         summary: 'AI explanation unavailable: automated security analysis could not contact the AI service.',
         explanation: 'AI explanation unavailable: Automated AI analysis could not be generated for this finding after multiple attempts. Please manually inspect the code context and the Semgrep rule ("' + ruleId + '").',
-        severity: (finding.extra && finding.extra.severity) || 'MEDIUM',
+        severity: defaultSev,
         suggestedFix: '/* AI explanation unavailable - manual review required */\n// Please verify line ' + lineNum + ' manually.'
     };
 }
@@ -181,8 +185,9 @@ export async function processLocalScan(job) {
         for (const f of findings) {
             const fp      = f.path || filePath;
             const line    = (f.start && f.start.line) ? f.start.line : 1;
-            const ruleId  = f.check_id || f.rule_id || 'unknown';
-            const msg     = (f.extra && f.extra.message) ? f.extra.message : 'Security finding';
+            const rawRuleId = f.check_id || f.rule_id || 'unknown';
+            const ruleId    = rawRuleId.split('.').pop() || rawRuleId;
+            const msg       = (f.extra && f.extra.message) ? f.extra.message : 'Security finding';
             
             // PR-aware / Scan-aware deduplication hash
             const hash    = crypto.createHash('sha256').update(repoName + ':scan-' + scanId + ':' + fp + ':' + line + ':' + ruleId).digest('hex');
@@ -290,9 +295,10 @@ export async function processGithubPR(job) {
             const relPath = path.isAbsolute(f.path) 
                 ? path.relative(scratchDir, f.path).replace(/\\/g, '/')
                 : f.path.replace(/\\/g, '/');
-            const line    = (f.start && f.start.line) ? f.start.line : 1;
-            const ruleId  = f.check_id || f.rule_id || 'unknown';
-            const msg     = (f.extra && f.extra.message) ? f.extra.message : 'Security finding';
+            const line      = (f.start && f.start.line) ? f.start.line : 1;
+            const rawRuleId = f.check_id || f.rule_id || 'unknown';
+            const ruleId    = rawRuleId.split('.').pop() || rawRuleId;
+            const msg       = (f.extra && f.extra.message) ? f.extra.message : 'Security finding';
 
             // Step 5: PR-aware deduplication hash incorporating repoName + prNumber
             const hash    = crypto.createHash('sha256').update(repoName + ':pr-' + prNumber + ':' + relPath + ':' + line + ':' + ruleId).digest('hex');
